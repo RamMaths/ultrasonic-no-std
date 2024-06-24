@@ -3,6 +3,7 @@
 #![feature(type_alias_impl_trait)]
 
 use alloc::boxed::Box;
+use embassy_sync::mutex::Mutex;
 use esp_backtrace as _;
 use esp_hal::{clock::ClockControl, delay::Delay, peripherals::Peripherals, prelude::*};
 use esp_hal::{
@@ -67,12 +68,15 @@ fn main() -> ! {
     let io = IO::new(peripherals.GPIO, peripherals.IO_MUX);
     let trigger = io.pins.gpio4.into_push_pull_output();
     let echo = io.pins.gpio5.into_pull_up_input();
-    let ultrasonic = Box::leak(Box::new(ultrasonic::Ultrasonic::new(trigger, echo)));
+    let ultrasonic = Box::leak(Box::new(Mutex::new(ultrasonic::Ultrasonic::new(
+        trigger, echo,
+    ))));
 
     //Execution
     executor.run(|spawner| {
         spawner.spawn(net::connect(controller)).unwrap();
         spawner.spawn(net::run_network(stack)).unwrap();
         spawner.spawn(net::net_state(stack)).unwrap();
+        spawner.spawn(ultrasonic::read_sensor(ultrasonic)).unwrap();
     });
 }

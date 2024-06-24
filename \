@@ -6,7 +6,6 @@ use esp_hal::gpio::{GpioPin, Input, Output};
 use esp_hal::prelude::_embedded_hal_digital_v2_InputPin;
 use esp_hal::prelude::_embedded_hal_digital_v2_OutputPin;
 use esp_hal::systimer::SystemTimer;
-use log::info;
 
 const TRIGGER_PIN: u8 = 4;
 const ECHO_PIN: u8 = 5;
@@ -26,7 +25,7 @@ impl Ultrasonic {
 }
 
 #[task]
-pub async fn read_sensor(ultrasonic: &'static Ultrasonic) {
+pub async fn read_sensor(mut ultrasonic: Ultrasonic) {
     //clean pulse
     ultrasonic.trigger.set_low().unwrap();
     Timer::after_millis(5).await;
@@ -36,15 +35,5 @@ pub async fn read_sensor(ultrasonic: &'static Ultrasonic) {
 
     while !ultrasonic.echo.is_high().unwrap() {}
 
-    let echo_start = SystemTimer::now();
-
-    while !ultrasonic.echo.is_low().unwrap() {}
-
-    let echo_end = SystemTimer::now();
-
-    let echo_dur = echo_end.wrapping_sub(echo_start);
-
-    let distance_cm = echo_dur / 16 / 58;
-
-    info!("DISTANCE IS: {}", distance_cm);
+    let now = SystemTimer::now();
 }
