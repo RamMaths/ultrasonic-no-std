@@ -5,6 +5,10 @@ runner = "espflash flash --monitor"
 ESP_LOGLEVEL="INFO"
 SSID = "Totalplay-93A2"
 PASSWORD = "93A2BCE4rQ6pq32j"
+THING_NAME = "ESP32S3_ULTRASONIC"
+AWS_IOT_ENDPOINT = "ayddrvc3hvejc-ats.iot.us-east-1.amazonaws.com"
+AWS_IOT_PUBLISH_TOPIC = "esp32/pub"
+AWS_IOT_SUBSCRIBE_TOPIC = "esp32/sub"
 
 [build]
 rustflags = [
