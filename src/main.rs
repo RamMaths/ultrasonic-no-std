@@ -3,6 +3,8 @@
 #![feature(type_alias_impl_trait)]
 
 use alloc::boxed::Box;
+use alloc::string::String;
+use embassy_sync::{blocking_mutex::raw::NoopRawMutex, channel::Channel};
 use esp_backtrace as _;
 use esp_hal::{clock::ClockControl, delay::Delay, peripherals::Peripherals, prelude::*};
 use esp_hal::{
@@ -30,6 +32,8 @@ fn init_heap() {
         ALLOCATOR.init(HEAP.as_mut_ptr() as *mut u8, HEAP_SIZE);
     }
 }
+
+type Message = (String, f32);
 
 #[entry]
 fn main() -> ! {
@@ -66,17 +70,23 @@ fn main() -> ! {
 
     //Setting up ultrasonic sensor
     let io = IO::new(peripherals.GPIO, peripherals.IO_MUX);
-    let trigger = io.pins.gpio15.into_push_pull_output();
-    let led = io.pins.gpio4.into_push_pull_output();
-    let echo = io.pins.gpio16.into_pull_up_input();
+    let trigger = io.pins.gpio4.into_push_pull_output();
+    let echo = io.pins.gpio5.into_pull_up_input();
+    let led = io.pins.gpio7.into_push_pull_output();
     let ultrasonic = ultrasonic::Ultrasonic::new(trigger, echo);
+    let outbox_channel: Channel<NoopRawMutex, Message, 5> = Channel::new();
+    let outbox_channel = Box::leak(Box::new(outbox_channel));
 
     //Execution
     executor.run(|spawner| {
         spawner.spawn(net::connect(controller)).unwrap();
         spawner.spawn(net::run_network(stack)).unwrap();
         spawner.spawn(net::net_state(stack)).unwrap();
-        spawner.spawn(ultrasonic::read_sensor(ultrasonic)).unwrap();
-        spawner.spawn(ultrasonic::led(led)).unwrap();
+        spawner
+            .spawn(ultrasonic::read_sensor(ultrasonic, outbox_channel.sender()))
+            .unwrap();
+        spawner
+            .spawn(ultrasonic::led(led, outbox_channel.receiver()))
+            .unwrap();
     });
 }

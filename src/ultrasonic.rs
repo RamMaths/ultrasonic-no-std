@@ -1,4 +1,8 @@
+use alloc::borrow::ToOwned;
 use embassy_executor::task;
+use embassy_sync::blocking_mutex::raw::NoopRawMutex;
+use embassy_sync::channel::Receiver;
+use embassy_sync::channel::Sender;
 use embassy_time::{Duration, Timer};
 use esp_hal::gpio::PullUp;
 use esp_hal::gpio::PushPull;
@@ -9,8 +13,10 @@ use esp_hal::prelude::_embedded_hal_digital_v2_ToggleableOutputPin;
 use esp_hal::systimer::SystemTimer;
 use log::info;
 
-const TRIGGER_PIN: u8 = 15;
-const ECHO_PIN: u8 = 16;
+use crate::Message;
+
+const TRIGGER_PIN: u8 = 4;
+const ECHO_PIN: u8 = 5;
 
 pub struct Ultrasonic {
     pub trigger: GpioPin<Output<PushPull>, TRIGGER_PIN>,
@@ -25,7 +31,7 @@ impl Ultrasonic {
         Self { trigger, echo }
     }
 
-    pub async fn read_sensor(&mut self) {
+    pub async fn read_sensor(&mut self) -> f32 {
         //clean pulse
         info!("Cleaning pulse");
         self.trigger.set_low().unwrap();
@@ -50,7 +56,7 @@ impl Ultrasonic {
 
         let distance_cm: f32 = echo_dur as f32 / 16.0 / 58.0;
 
-        info!("DISTANCE IS: {}", distance_cm)
+        distance_cm
     }
 
     async fn wait_echo_for_high(&self) {
@@ -70,17 +76,35 @@ impl Ultrasonic {
 }
 
 #[task]
-pub async fn read_sensor(mut ultrasonic: Ultrasonic) {
+pub async fn read_sensor(
+    mut ultrasonic: Ultrasonic,
+    sender: Sender<'static, NoopRawMutex, Message, 5>,
+) -> ! {
     loop {
+        let distance_cm = ultrasonic.read_sensor().await;
+        sender.send(("topic".to_owned(), distance_cm)).await;
         Timer::after_millis(1000).await;
-        ultrasonic.read_sensor().await;
     }
 }
 
 #[task]
-pub async fn led(mut led: GpioPin<Output<PushPull>, 4>) {
+pub async fn led(
+    mut led: GpioPin<Output<PushPull>, 7>,
+    receiver: Receiver<'static, NoopRawMutex, Message, 5>,
+) {
+    let mut flag: bool = true;
     loop {
-        Timer::after_millis(1000).await;
+        if flag {
+            led.set_high().unwrap();
+            let (_, message) = receiver.receive().await;
+            info!("distance: {}", message);
+            flag = false;
+        } else {
+            led.set_low().unwrap();
+            flag = true;
+        }
+
         led.toggle().unwrap();
+        Timer::after_millis(1000).await;
     }
 }
